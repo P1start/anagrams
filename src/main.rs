@@ -47,11 +47,12 @@ impl Anagrammer {
         let mut dictionary = Dictionary::default();
 
         for line in contents.split('\n') {
-            let w = line.trim().to_lowercase();
+            let word = line.trim();
+            let w = word.to_lowercase();
             if w.len() == 0 { continue }
             
             if let Some(bs) = make_key(&w) {
-                dictionary.entry(bs).or_insert_with(|| vec![]).push(w.into_boxed_str());
+                dictionary.entry(bs).or_insert_with(|| vec![]).push(word.into());
             }
         }
 
