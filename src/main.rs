@@ -186,8 +186,13 @@ fn main() -> std::io::Result<()> {
 
     let mut bytes = vec![];
     for c in string.chars() {
-        let s = c as u32;
-        if c != ' ' && s < 0x80 {
+        if c as u32 >= 0x80 {
+            eprintln!("error: only ASCII strings are supported");
+            std::process::exit(1)
+        }
+
+        let s = c.to_lowercase().next().unwrap() as u32;
+        if c != ' ' {
             bytes.push(s as u8);
         }
     }
