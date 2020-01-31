@@ -27,6 +27,25 @@ fn subtract(word: &[u8], pool: &[u8]) -> Option<Box<[u8]>> {
 fn make_key(word: &str) -> Option<Box<[u8]>> {
     let mut bs: Vec<u8> = word.into();
     if bs.iter().any(|&i| i >= 0x80) { return None }
+
+    // Take only the alphabetic characters
+    let mut i = 0;
+    loop {
+        if i >= bs.len() { break }
+        match bs[i] {
+            b'A' ..= b'Z' => {
+                bs[i] += 0x20;
+                i += 1;
+            },
+            b'a' ..= b'z' | b'0' ..= b'9' => {
+                i += 1;
+            },
+            _ => {
+                bs.swap_remove(i);
+            },
+        }
+    }
+
     bs.sort();
     Some(bs.into_boxed_slice())
 }
@@ -48,10 +67,9 @@ impl Anagrammer {
 
         for line in contents.split('\n') {
             let word = line.trim();
-            let w = word.to_lowercase();
-            if w.len() == 0 { continue }
-            
-            if let Some(bs) = make_key(&w) {
+            if word.len() == 0 { continue }
+
+            if let Some(bs) = make_key(&word) {
                 dictionary.entry(bs).or_insert_with(|| vec![]).push(word.into());
             }
         }
