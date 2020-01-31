@@ -1,0 +1,8 @@
+[package]
+name = "anagrams"
+version = "0.0.0"
+authors = ["P1start"]
+edition = "2018"
+
+[dependencies]
+argparse = "0.2.2"
