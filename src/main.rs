@@ -6,52 +6,50 @@ use std::fs::File;
 use std::path::Path;
 use std::io::{self, prelude::*};
 
-fn subtract(word: &[u8], pool: &[u8]) -> Option<Box<[u8]>> {
-    let mut i = 0;
-    let mut result = vec![];
+/// `Identifier` is used to denote a normalized (i.e., lowercased) and sorted string.
+type Identifier = str;
+type Dictionary = HashMap<Box<Identifier>, Vec<Box<Identifier>>, BuildHasherDefault<DefaultHasher>>;
+type Iter<'a> = std::collections::hash_map::Iter<'a, Box<Identifier>, Vec<Box<Identifier>>>;
 
-    for &c in pool {
-        if i < word.len() && word[i] == c {
-            i += 1;
+fn subtract(word: &Identifier, pool: &Identifier) -> Option<Box<Identifier>> {
+    let mut result = String::new();
+
+    let mut word_chars = word.chars().peekable();
+    for c in pool.chars() {
+        let next = word_chars.peek();
+        if next.is_some() && *next.unwrap() == c {
+            word_chars.next();
         } else {
             result.push(c);
         }
     }
 
-    if i >= word.len() {
-        return Some(result.into_boxed_slice())
+    if word_chars.peek().is_none() {
+        return Some(result.into())
     }
     None
 }
 
-fn make_key(word: &str) -> Option<Box<[u8]>> {
-    let mut bs: Vec<u8> = word.into();
-    if bs.iter().any(|&i| i >= 0x80) { return None }
+fn make_key(word: &str) -> Box<Identifier> {
+    let mut bs: Vec<char> = vec![];
 
     // Take only the alphabetic characters
-    let mut i = 0;
-    loop {
-        if i >= bs.len() { break }
-        match bs[i] {
-            b'A' ..= b'Z' => {
-                bs[i] += 0x20;
-                i += 1;
-            },
-            b'a' ..= b'z' | b'0' ..= b'9' => {
-                i += 1;
-            },
-            _ => {
-                bs.swap_remove(i);
-            },
+    for c in word.chars() {
+        if c.is_alphanumeric() {
+            for lc in c.to_lowercase() {
+                bs.push(lc);
+            }
         }
     }
 
     bs.sort();
-    Some(bs.into_boxed_slice())
-}
+    let mut string = String::with_capacity(bs.len()); // lower bound on UTF-8 len
+    for c in bs {
+        string.push(c);
+    }
 
-type Dictionary = HashMap<Box<[u8]>, Vec<Box<str>>, BuildHasherDefault<DefaultHasher>>;
-type Iter<'a> = std::collections::hash_map::Iter<'a, Box<[u8]>, Vec<Box<str>>>;
+    string.into()
+}
 
 pub struct Anagrammer {
     dictionary: Dictionary,
@@ -69,9 +67,8 @@ impl Anagrammer {
             let word = line.trim();
             if word.len() == 0 { continue }
 
-            if let Some(bs) = make_key(&word) {
-                dictionary.entry(bs).or_insert_with(|| vec![]).push(word.into());
-            }
+            let bs = make_key(&word);
+            dictionary.entry(bs).or_insert_with(|| vec![]).push(word.into());
         }
 
         Ok(Anagrammer {
@@ -83,12 +80,11 @@ impl Anagrammer {
         let mut dictionary = Dictionary::default();
 
         for line in include_str!("english-words").split('\n') {
-            let w = line.trim().to_lowercase();
-            if w.len() == 0 { continue }
+            let word = line.trim();
+            if word.len() == 0 { continue }
             
-            if let Some(bs) = make_key(&w) {
-                dictionary.entry(bs).or_insert_with(|| vec![]).push(w.into_boxed_str());
-            }
+            let bs = make_key(&word);
+            dictionary.entry(bs).or_insert_with(|| vec![]).push(word.into());
         }
 
         Anagrammer {
@@ -96,7 +92,7 @@ impl Anagrammer {
         }
     }
 
-    fn restrict(&mut self, pool: &[u8]) {
+    fn restrict(&mut self, pool: &Identifier) {
         self.dictionary.retain(|key, _| {
             subtract(key, pool).is_some()
         });
@@ -108,14 +104,12 @@ impl Anagrammer {
         });
     }
 
-    pub fn find_anagrams<F: FnMut(Vec<&str>)>(mut self, word: &[u8], minwords: usize, maxwords: usize, mut f: F) {
-        let mut pool = word.iter().cloned().collect::<Vec<_>>();
-        pool.sort();
-        self.restrict(&pool);
-        self.anagrams_recur(self.dictionary.iter(), &pool, minwords, maxwords, &mut f);
+    pub fn find_anagrams<F: FnMut(Vec<&str>)>(mut self, pool: &Identifier, minwords: usize, maxwords: usize, mut f: F) {
+        self.restrict(pool);
+        self.anagrams_recur(self.dictionary.iter(), pool, minwords, maxwords, &mut f);
     }
 
-    fn anagrams_recur(&self, mut dictionary_iter: Iter, pool: &[u8], minwords: usize, maxwords: usize, f: &mut dyn FnMut(Vec<&str>)) {
+    fn anagrams_recur(&self, mut dictionary_iter: Iter, pool: &Identifier, minwords: usize, maxwords: usize, f: &mut dyn FnMut(Vec<&str>)) {
         if minwords > maxwords {
             return
         }
@@ -202,11 +196,6 @@ fn main() -> std::io::Result<()> {
         ap.parse_args_or_exit();
     }
 
-    let bytes = make_key(&string).unwrap_or_else(|| {
-        eprintln!("error: only ASCII strings are supported");
-        std::process::exit(1)
-    });
-
     let mut anagrammer = if dictionary_path.len() == 0 {
         Anagrammer::from_default_list()
     } else {
@@ -216,6 +205,8 @@ fn main() -> std::io::Result<()> {
     if (minletters, maxletters) != (0, std::usize::MAX) {
         anagrammer.restrict_letters(minletters, maxletters);
     }
+
+    let bytes = make_key(&string);
 
     anagrammer.find_anagrams(&bytes, minwords, maxwords, &mut print_set);
     Ok(())
