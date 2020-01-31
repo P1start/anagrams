@@ -202,18 +202,10 @@ fn main() -> std::io::Result<()> {
         ap.parse_args_or_exit();
     }
 
-    let mut bytes = vec![];
-    for c in string.chars() {
-        if c as u32 >= 0x80 {
-            eprintln!("error: only ASCII strings are supported");
-            std::process::exit(1)
-        }
-
-        let s = c.to_lowercase().next().unwrap() as u32;
-        if c != ' ' {
-            bytes.push(s as u8);
-        }
-    }
+    let bytes = make_key(&string).unwrap_or_else(|| {
+        eprintln!("error: only ASCII strings are supported");
+        std::process::exit(1)
+    });
 
     let mut anagrammer = if dictionary_path.len() == 0 {
         Anagrammer::from_default_list()
